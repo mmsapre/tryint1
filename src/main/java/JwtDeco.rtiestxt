@@ -1,0 +1,13 @@
+package com.example.semantic.config;
+
+import org.springframework.boot.context.properties.ConfigurationProperties;
+
+@ConfigurationProperties(prefix = "security.jwt")
+public class JwtDecoderProperties {
+  private boolean enabled;
+  private String jwksUrl;
+  private String issuer;
+  private String audience;
+
+  // getters/setters
+}
