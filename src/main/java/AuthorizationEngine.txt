@@ -1,0 +1,82 @@
+package com.example.semantic.engine;
+
+import com.example.semantic.config.PolicyProperties;
+import com.example.semantic.model.*;
+
+import java.util.*;
+
+public class AuthorizationEngine {
+
+  private final PolicyProperties policy;
+  private final SemanticGraph graph;
+  private final FieldClassifier fieldClassifier;
+
+  public AuthorizationEngine(PolicyProperties policy) {
+    this.policy = policy;
+    this.graph = new SemanticGraph(policy);
+    this.fieldClassifier = new FieldClassifier(policy);
+  }
+
+  public AuthorizationDecision decide(RequestFacts facts, SubjectContext subject, IntentResult intent) {
+
+    // 1) dataset must resolve
+    if (facts.datasetName() == null || !policy.getDatasets().containsKey(facts.datasetName())) {
+      return new AuthorizationDecision(false, "DENY", Purpose.VIEW_ONLY, intent.confidence(),
+          List.of(), Map.of(), "No dataset mapping for " + facts.path());
+    }
+
+    var ds = policy.getDatasets().get(facts.datasetName());
+
+    // 2) Non-degradable: REGION & DATA_DOMAIN
+    // Region
+    if (!ds.getRegions().contains("GLOBAL") && !ds.getRegions().contains(subject.region())) {
+      return new AuthorizationDecision(false, "DENY", Purpose.VIEW_ONLY, intent.confidence(),
+          List.of(), Map.of(), "REGION mismatch subject=" + subject.region() + " dataset=" + ds.getRegions());
+    }
+
+    // 3) purpose (degradable)
+    Purpose requested = intent.purpose();
+    Purpose effective = requested;
+
+    if (!purposeAllowed(subject, requested)) {
+      // degrade to VIEW_ONLY
+      effective = Purpose.VIEW_ONLY;
+    }
+
+    // 4) allowed fields: dataset default fields (you can tighten later by request parsing)
+    List<String> allowedFields = ds.getDefaultSelectFields();
+
+    // 5) build transforms per field (mask those not allowed for purpose)
+    Map<String, String> transforms = new LinkedHashMap<>();
+    Map<String, String> strat = policy.getObfuscation().getStrategies();
+
+    for (String f : allowedFields) {
+      FieldClassifier.FieldSem sem = fieldClassifier.classifyKey(f);
+      boolean ok = fieldClassAllowed(effective, sem.fieldClass());
+      if (!ok) {
+        transforms.put(f, strat.getOrDefault(sem.fieldClass(), "REDACT"));
+      }
+    }
+
+    String decision = transforms.isEmpty() ? "ALLOW" : "OBFUSCATE";
+
+    // Confidence gate: if low confidence → force VIEW_ONLY (safe)
+    if (intent.confidence() < policy.getConfidenceThreshold()) {
+      effective = Purpose.VIEW_ONLY;
+      decision = "OBFUSCATE";
+    }
+
+    return new AuthorizationDecision(true, decision, effective, intent.confidence(),
+        allowedFields, transforms,
+        "requestedPurpose=" + requested + ", effectivePurpose=" + effective + ", dataset=" + facts.datasetName());
+  }
+
+  private boolean purposeAllowed(SubjectContext subject, Purpose p) {
+    if (subject.allowedPurposes().contains(p)) return true;
+    return graph.allows("CLIENT_TYPE:" + subject.clientType(), "PURPOSE:" + p.name());
+  }
+
+  private boolean fieldClassAllowed(Purpose p, String fieldClass) {
+    return graph.allows("PURPOSE:" + p.name(), "FIELD_CLASS:" + fieldClass);
+  }
+}
