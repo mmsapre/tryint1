@@ -1,0 +1,28 @@
+package com.example.semantic.gateway;
+
+import org.springframework.core.io.buffer.DataBuffer;
+import org.springframework.core.io.buffer.DataBufferUtils;
+import org.springframework.http.server.reactive.ServerHttpRequest;
+import reactor.core.publisher.Mono;
+
+import java.nio.charset.StandardCharsets;
+
+public final class CachedBodyUtil {
+  private CachedBodyUtil() {}
+
+  public static Mono<String> readBody(ServerHttpRequest request) {
+    return DataBufferUtils.join(request.getBody())
+        .map(buf -> {
+          byte[] bytes = new byte[buf.readableByteCount()];
+          buf.read(bytes);
+          DataBufferUtils.release(buf);
+          return new String(bytes, StandardCharsets.UTF_8);
+        })
+        .defaultIfEmpty("");
+  }
+
+  public static DataBuffer wrap(org.springframework.core.io.buffer.DataBufferFactory f, String body) {
+    byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
+    return f.wrap(bytes);
+  }
+}
