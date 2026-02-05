@@ -1,0 +1,50 @@
+package com.example.semantic.extract;
+
+import com.example.semantic.model.Purpose;
+import com.example.semantic.model.SubjectContext;
+import jakarta.servlet.http.HttpServletRequest;
+
+import java.security.cert.X509Certificate;
+import java.util.List;
+
+public class X509SubjectExtractor {
+
+  public SubjectContext extract(HttpServletRequest req) {
+    X509Certificate[] certs =
+        (X509Certificate[]) req.getAttribute(
+            "javax.servlet.request.X509Certificate");
+
+    if (certs == null || certs.length == 0) return null;
+
+    X509Certificate cert = certs[0];
+
+    String dn = cert.getSubjectX500Principal().getName();
+
+    // Example DN:
+    // CN=reporting-user, OU=FINANCE, O=ACME, C=IN
+
+    String userId = parse(dn, "CN");
+    String region = parse(dn, "C");
+    String clientType = "INTERNAL";
+
+    return new SubjectContext(
+        userId,
+        "t1",
+        clientType,
+        region,
+        List.of(
+            Purpose.INTERNAL_REPORT,
+            Purpose.INTERNAL_OPERATION
+        )
+    );
+  }
+
+  private String parse(String dn, String key) {
+    for (String p : dn.split(",")) {
+      String[] kv = p.trim().split("=");
+      if (kv[0].equalsIgnoreCase(key))
+        return kv[1];
+    }
+    return "";
+  }
+}
