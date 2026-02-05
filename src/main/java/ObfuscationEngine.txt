@@ -1,0 +1,87 @@
+package com.example.semantic.engine;
+
+import com.example.semantic.model.AuthorizationDecision;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.*;
+
+import java.math.BigDecimal;
+import java.util.Iterator;
+import java.util.Map;
+
+public class ObfuscationEngine {
+
+  private final ObjectMapper mapper = new ObjectMapper();
+
+  public String transformJson(String rawJson, AuthorizationDecision d) {
+    try {
+      JsonNode root = mapper.readTree(rawJson);
+      JsonNode out = apply(root, d.fieldTransforms());
+      return mapper.writeValueAsString(out);
+    } catch (Exception e) {
+      // If not JSON, return as-is (or you can block based on content-type)
+      return rawJson;
+    }
+  }
+
+  private JsonNode apply(JsonNode node, Map<String, String> transforms) {
+    if (node == null) return NullNode.instance;
+
+    if (node.isObject()) {
+      ObjectNode o = (ObjectNode) node.deepCopy();
+      Iterator<Map.Entry<String, JsonNode>> it = o.fields();
+      while (it.hasNext()) {
+        Map.Entry<String, JsonNode> e = it.next();
+        String key = e.getKey();
+        JsonNode value = e.getValue();
+
+        // recurse first
+        o.set(key, apply(value, transforms));
+
+        // apply transform if key present in obligations
+        String t = transforms.get(key);
+        if (t != null) {
+          o.set(key, transformValue(o.get(key), t));
+        }
+      }
+      return o;
+    }
+
+    if (node.isArray()) {
+      ArrayNode arr = mapper.createArrayNode();
+      for (JsonNode c : node) arr.add(apply(c, transforms));
+      return arr;
+    }
+
+    return node;
+  }
+
+  private JsonNode transformValue(JsonNode v, String t) {
+    if (v == null || v.isNull()) return NullNode.instance;
+    return switch (t) {
+      case "REDACT" -> NullNode.instance;
+      case "MASK" -> new TextNode(maskText(v.asText()));
+      case "BUCKET" -> bucketNumber(v);
+      case "NONE" -> v;
+      default -> v;
+    };
+  }
+
+  private String maskText(String s) {
+    if (s == null) return null;
+    if (s.length() <= 2) return "**";
+    return s.substring(0, 2) + "****";
+  }
+
+  private JsonNode bucketNumber(JsonNode v) {
+    try {
+      BigDecimal n = new BigDecimal(v.asText());
+      // bucket by 1000s
+      BigDecimal base = n.divideToIntegralValue(BigDecimal.valueOf(1000)).multiply(BigDecimal.valueOf(1000));
+      BigDecimal top = base.add(BigDecimal.valueOf(1000));
+      return new TextNode(base + "-" + top);
+    } catch (Exception e) {
+      return new TextNode("BUCKETED");
+    }
+  }
+}
