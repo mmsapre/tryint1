@@ -1,0 +1,128 @@
+package com.example.semantic.gateway;
+
+import com.example.semantic.config.PolicyProperties;
+import com.example.semantic.engine.AuthorizationEngine;
+import com.example.semantic.engine.ObfuscationEngine;
+import com.example.semantic.extract.JwtSubjectExtractor;
+import com.example.semantic.extract.RequestFactsExtractor;
+import com.example.semantic.intent.IntentService;
+import com.example.semantic.model.AuthorizationDecision;
+import org.springframework.cloud.gateway.filter.GlobalFilter;
+import org.springframework.cloud.gateway.filter.GatewayFilterChain;
+import org.springframework.core.Ordered;
+import org.springframework.core.io.buffer.*;
+import org.springframework.http.*;
+import org.springframework.http.server.reactive.*;
+import org.springframework.stereotype.Component;
+import org.springframework.web.server.ServerWebExchange;
+import reactor.core.publisher.Mono;
+
+import java.nio.charset.StandardCharsets;
+
+@Component
+public class SemanticGatewayGlobalFilter implements GlobalFilter, Ordered {
+
+  private final PolicyProperties policy;
+  private final RequestFactsExtractor factsExtractor;
+  private final JwtSubjectExtractor subjectExtractor;
+  private final IntentService intentService;
+  private final AuthorizationEngine authz;
+  private final ObfuscationEngine obfuscator;
+
+  public SemanticGatewayGlobalFilter(
+      PolicyProperties policy,
+      IntentService intentService
+  ) {
+    this.policy = policy;
+    this.intentService = intentService;
+
+    // small: keep these pure in-memory (fast)
+    this.factsExtractor = new RequestFactsExtractor(policy);
+    this.subjectExtractor = new JwtSubjectExtractor();
+    this.authz = new AuthorizationEngine(policy);
+    this.obfuscator = new ObfuscationEngine();
+  }
+
+  @Override
+  public int getOrder() {
+    // run early
+    return -1;
+  }
+
+  @Override
+  public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
+
+    String path = exchange.getRequest().getURI().getPath();
+    // Only apply to /api/** (our routed public endpoints)
+    if (!path.startsWith("/api/")) {
+      return chain.filter(exchange);
+    }
+
+    return CachedBodyUtil.readBody(exchange.getRequest())
+        .flatMap(reqBody -> {
+          var facts = factsExtractor.extract(exchange.getRequest(), reqBody);
+          var subject = subjectExtractor.extract(exchange.getRequest());
+
+          return intentService.classify(facts)
+              .flatMap(intent -> {
+                AuthorizationDecision decision = authz.decide(facts, subject, intent);
+
+                if (!decision.allow()) {
+                  exchange.getResponse().setStatusCode(HttpStatus.FORBIDDEN);
+                  exchange.getResponse().getHeaders().setContentType(MediaType.APPLICATION_JSON);
+                  String msg = "{\"deny\":true,\"reason\":\"" + safe(decision.reason()) + "\"}";
+                  DataBuffer db = CachedBodyUtil.wrap(exchange.getResponse().bufferFactory(), msg);
+                  return exchange.getResponse().writeWith(Mono.just(db));
+                }
+
+                // Decorate response to rewrite body
+                ServerHttpResponse original = exchange.getResponse();
+                DataBufferFactory factory = original.bufferFactory();
+
+                ServerHttpResponseDecorator decorated = new ServerHttpResponseDecorator(original) {
+                  @Override
+                  public Mono<Void> writeWith(org.reactivestreams.Publisher<? extends DataBuffer> body) {
+
+                    MediaType ct = getHeaders().getContentType();
+                    // Only JSON responses are rewritten; everything else passes through
+                    boolean json = ct != null && (ct.isCompatibleWith(MediaType.APPLICATION_JSON)
+                        || ct.toString().toLowerCase().contains("json"));
+
+                    if (!json) {
+                      return super.writeWith(body);
+                    }
+
+                    return DataBufferUtils.join(body)
+                        .flatMap(buf -> {
+                          byte[] bytes = new byte[buf.readableByteCount()];
+                          buf.read(bytes);
+                          DataBufferUtils.release(buf);
+
+                          String raw = new String(bytes, StandardCharsets.UTF_8);
+                          String masked = obfuscator.transformJson(raw, decision);
+
+                          byte[] out = masked.getBytes(StandardCharsets.UTF_8);
+                          getHeaders().setContentLength(out.length);
+
+                          // helpful headers for debugging/audit
+                          getHeaders().set("X-Semantic-Decision", decision.decision());
+                          getHeaders().set("X-Effective-Purpose", decision.effectivePurpose().name());
+                          getHeaders().set("X-Intent-Confidence", String.valueOf(decision.confidence()));
+                          getHeaders().set("X-Semantic-Reason", decision.reason());
+
+                          DataBuffer db = factory.wrap(out);
+                          return super.writeWith(Mono.just(db));
+                        });
+                  }
+                };
+
+                return chain.filter(exchange.mutate().response(decorated).build());
+              });
+        });
+  }
+
+  private static String safe(String s) {
+    if (s == null) return "";
+    return s.replace("\"", "'").replace("\n", " ").replace("\r", " ");
+  }
+}
