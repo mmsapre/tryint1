@@ -1,0 +1,54 @@
+package com.example.semantic.demo;
+
+import org.springframework.web.bind.annotation.*;
+
+import java.util.Map;
+
+@RestController
+@RequestMapping("/backend")
+public class BackendDemoController {
+
+  @GetMapping("/accounts/{id}")
+  public Map<String, Object> account(@PathVariable String id) {
+    return Map.of(
+        "account_id", id,
+        "client_id", "C1001",
+        "email", "john.doe@bank.com",
+        "balance", 125000,
+        "country", "IN",
+        "city", "Mumbai"
+    );
+  }
+
+  @GetMapping("/instruments/{id}")
+  public Map<String, Object> instrument(@PathVariable String id) {
+    return Map.of(
+        "instrument_id", id,
+        "isin", "US1234567890",
+        "cusip", "123456AB",
+        "issuer", "ACME INC",
+        "country", "US"
+    );
+  }
+
+  @GetMapping("/customers/{id}")
+  public Map<String, Object> customer(@PathVariable String id) {
+    return Map.of(
+        "customer_id", id,
+        "name", "John Doe",
+        "email", "john.doe@bank.com",
+        "pan", "ABCDE1234F",
+        "country", "IN"
+    );
+  }
+
+  @GetMapping("/party/{id}")
+  public Map<String, Object> party(@PathVariable String id) {
+    return Map.of(
+        "party_id", id,
+        "party_name", "Big Fund LLP",
+        "lei", "5493001KJTIIGC8Y1R12",
+        "country", "EU"
+    );
+  }
+}
