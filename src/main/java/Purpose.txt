@@ -1,0 +1,14 @@
+package com.example.semantic.model;
+
+public enum Purpose {
+  VIEW_ONLY,
+  INTERNAL_REPORT,
+  INTERNAL_OPERATION,
+  CLIENT_REPORT,
+  EXTERNAL_REPORT;
+
+  public static Purpose of(String s) {
+    if (s == null || s.isBlank()) return VIEW_ONLY;
+    return Purpose.valueOf(s.trim().toUpperCase());
+  }
+}
