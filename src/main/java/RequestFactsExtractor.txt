@@ -1,0 +1,36 @@
+package com.example.semantic.extract;
+
+import com.example.semantic.config.PolicyProperties;
+import com.example.semantic.model.RequestFacts;
+import org.springframework.http.server.reactive.ServerHttpRequest;
+
+import java.util.regex.Pattern;
+
+public class RequestFactsExtractor {
+  private final PolicyProperties policy;
+
+  public RequestFactsExtractor(PolicyProperties policy) {
+    this.policy = policy;
+  }
+
+  public RequestFacts extract(ServerHttpRequest req, String requestBody) {
+    String method = req.getMethod() == null ? "GET" : req.getMethod().name();
+    String path = req.getURI().getPath();
+    String prompt = req.getHeaders().getFirst("X-Prompt"); // optional
+
+    String dataset = resolveDataset(path);
+
+    return new RequestFacts(method, path, dataset, prompt, requestBody == null ? "" : requestBody);
+  }
+
+  private String resolveDataset(String path) {
+    for (var r : policy.getDatasetRules()) {
+      String rx = r.getMatch().getPathRegex();
+      if (rx == null) continue;
+      if (Pattern.compile(rx).matcher(path).matches()) {
+        return r.getYields().getDataset();
+      }
+    }
+    return null;
+  }
+}
