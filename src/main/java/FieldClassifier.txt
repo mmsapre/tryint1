@@ -1,0 +1,36 @@
+package com.example.semantic.engine;
+
+import com.example.semantic.config.PolicyProperties;
+import com.example.semantic.model.Sensitivity;
+
+import java.util.*;
+import java.util.regex.Pattern;
+
+public class FieldClassifier {
+
+  public record FieldSem(String fieldClass, Sensitivity sensitivity) {}
+
+  private final List<Rule> rules = new ArrayList<>();
+
+  public FieldClassifier(PolicyProperties policy) {
+    for (var r : policy.getFieldRegistry()) {
+      String rx = r.getMatch().getPathRegex();
+      String fc = r.getSemantics().getFieldClass();
+      String sens = r.getSemantics().getSensitivity();
+      rules.add(new Rule(
+          Pattern.compile(rx, Pattern.CASE_INSENSITIVE),
+          fc == null ? "derived" : fc,
+          sens == null ? Sensitivity.LOW : Sensitivity.valueOf(sens)
+      ));
+    }
+  }
+
+  public FieldSem classifyKey(String key) {
+    for (Rule r : rules) {
+      if (r.rx.matcher(key).matches()) return new FieldSem(r.fieldClass, r.sensitivity);
+    }
+    return new FieldSem("derived", Sensitivity.LOW);
+  }
+
+  private record Rule(Pattern rx, String fieldClass, Sensitivity sensitivity) {}
+}
