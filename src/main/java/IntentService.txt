@@ -1,0 +1,9 @@
+package com.example.semantic.intent;
+
+import com.example.semantic.model.IntentResult;
+import com.example.semantic.model.RequestFacts;
+import reactor.core.publisher.Mono;
+
+public interface IntentService {
+  Mono<IntentResult> classify(RequestFacts facts);
+}
