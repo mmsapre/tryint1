@@ -1,0 +1,62 @@
+package com.example.semantic.extract;
+
+import com.example.semantic.model.Purpose;
+import com.example.semantic.model.SubjectContext;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.http.server.reactive.ServerHttpRequest;
+
+import java.nio.charset.StandardCharsets;
+import java.util.*;
+
+public class JwtSubjectExtractor {
+  private final ObjectMapper mapper = new ObjectMapper();
+
+  public SubjectContext extract(ServerHttpRequest req) {
+    String auth = req.getHeaders().getFirst("Authorization");
+    Map<String, Object> claims = decodeJwtClaims(auth);
+
+    String userId = str(claims.getOrDefault("sub", "anonymous"));
+    String tenant = str(claims.getOrDefault("tenant", "t1"));
+    String clientType = str(claims.getOrDefault("clientType", "CONSUMER")).toUpperCase();
+    String region = str(claims.getOrDefault("region", "GLOBAL")).toUpperCase();
+
+    List<Purpose> allowedPurposes = new ArrayList<>();
+    Object ap = claims.get("allowedPurposes");
+    if (ap instanceof List<?> l) {
+      for (Object o : l) allowedPurposes.add(Purpose.of(String.valueOf(o)));
+    }
+    if (allowedPurposes.isEmpty()) allowedPurposes = List.of(Purpose.VIEW_ONLY);
+
+    return new SubjectContext(userId, tenant, clientType, region, allowedPurposes);
+  }
+
+  private Map<String, Object> decodeJwtClaims(String auth) {
+    try {
+      if (auth == null || !auth.startsWith("Bearer ")) return Map.of();
+      String jwt = auth.substring("Bearer ".length()).trim();
+      String[] parts = jwt.split("\\.");
+      if (parts.length < 2) return Map.of();
+      byte[] json = Base64.getUrlDecoder().decode(parts[1]);
+      JsonNode node = mapper.readTree(new String(json, StandardCharsets.UTF_8));
+
+      Map<String, Object> out = new HashMap<>();
+      node.fieldNames().forEachRemaining(fn -> {
+        JsonNode v = node.get(fn);
+        if (v.isArray()) {
+          List<Object> arr = new ArrayList<>();
+          v.forEach(x -> arr.add(x.isTextual() ? x.asText() : x.toString()));
+          out.put(fn, arr);
+        } else if (v.isTextual()) out.put(fn, v.asText());
+        else if (v.isNumber()) out.put(fn, v.numberValue());
+        else if (v.isBoolean()) out.put(fn, v.asBoolean());
+        else out.put(fn, v.toString());
+      });
+      return out;
+    } catch (Exception e) {
+      return Map.of();
+    }
+  }
+
+  private static String str(Object o) { return o == null ? "" : String.valueOf(o); }
+}
