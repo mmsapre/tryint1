@@ -1,0 +1,9 @@
+package com.example.semantic.model;
+
+public record RequestFacts(
+    String method,
+    String path,
+    String datasetName,
+    String promptHint,
+    String requestBody
+) {}
