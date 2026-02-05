@@ -1,0 +1,5 @@
+package com.example.semantic.model;
+
+public enum Sensitivity {
+  LOW, MEDIUM, HIGH, VERY_HIGH
+}
