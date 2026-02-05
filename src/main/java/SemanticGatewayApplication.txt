@@ -1,0 +1,14 @@
+package com.example.semantic;
+
+import com.example.semantic.config.PolicyProperties;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+
+@SpringBootApplication
+@EnableConfigurationProperties(PolicyProperties.class)
+public class SemanticGatewayApplication {
+  public static void main(String[] args) {
+    SpringApplication.run(SemanticGatewayApplication.class, args);
+  }
+}
