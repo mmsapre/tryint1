@@ -1,0 +1,22 @@
+package com.example.semantic.extract;
+
+import com.example.semantic.model.SubjectContext;
+import jakarta.servlet.http.HttpServletRequest;
+
+public class UnifiedSubjectExtractor {
+
+  private final JwtSubjectExtractor jwt;
+  private final X509SubjectExtractor x509;
+
+  public UnifiedSubjectExtractor() {
+    this.jwt = new JwtSubjectExtractor();
+    this.x509 = new X509SubjectExtractor();
+  }
+
+  public SubjectContext extract(HttpServletRequest req) {
+    SubjectContext mtls = x509.extract(req);
+    if (mtls != null) return mtls;
+
+    return jwt.extract(req);
+  }
+}
