@@ -1,0 +1,128 @@
+package com.example.semantic.config;
+
+import org.springframework.boot.context.properties.ConfigurationProperties;
+
+import java.util.*;
+
+@ConfigurationProperties(prefix = "policy")
+public class PolicyProperties {
+
+  private double confidenceThreshold = 0.75;
+
+  private List<DatasetRule> datasetRules = new ArrayList<>();
+  private Map<String, DatasetCfg> datasets = new LinkedHashMap<>();
+  private List<FieldRuleCfg> fieldRegistry = new ArrayList<>();
+  private GraphCfg graph = new GraphCfg();
+  private ObfuscationCfg obfuscation = new ObfuscationCfg();
+
+  public double getConfidenceThreshold() { return confidenceThreshold; }
+  public void setConfidenceThreshold(double v) { this.confidenceThreshold = v; }
+
+  public List<DatasetRule> getDatasetRules() { return datasetRules; }
+  public void setDatasetRules(List<DatasetRule> v) { this.datasetRules = v; }
+
+  public Map<String, DatasetCfg> getDatasets() { return datasets; }
+  public void setDatasets(Map<String, DatasetCfg> v) { this.datasets = v; }
+
+  public List<FieldRuleCfg> getFieldRegistry() { return fieldRegistry; }
+  public void setFieldRegistry(List<FieldRuleCfg> v) { this.fieldRegistry = v; }
+
+  public GraphCfg getGraph() { return graph; }
+  public void setGraph(GraphCfg v) { this.graph = v; }
+
+  public ObfuscationCfg getObfuscation() { return obfuscation; }
+  public void setObfuscation(ObfuscationCfg v) { this.obfuscation = v; }
+
+  // -------- dataset rule --------
+  public static class DatasetRule {
+    private Match match = new Match();
+    private Yields yields = new Yields();
+    public Match getMatch() { return match; }
+    public void setMatch(Match v) { this.match = v; }
+    public Yields getYields() { return yields; }
+    public void setYields(Yields v) { this.yields = v; }
+  }
+
+  public static class Match {
+    private String pathRegex;
+    public String getPathRegex() { return pathRegex; }
+    public void setPathRegex(String v) { this.pathRegex = v; }
+  }
+
+  public static class Yields {
+    private String dataset;
+    public String getDataset() { return dataset; }
+    public void setDataset(String v) { this.dataset = v; }
+  }
+
+  // -------- datasets --------
+  public static class DatasetCfg {
+    private List<String> dataDomains = new ArrayList<>();
+    private List<String> regions = new ArrayList<>();
+    private List<String> defaultSelectFields = new ArrayList<>();
+
+    public List<String> getDataDomains() { return dataDomains; }
+    public void setDataDomains(List<String> v) { this.dataDomains = v; }
+
+    public List<String> getRegions() { return regions; }
+    public void setRegions(List<String> v) { this.regions = v; }
+
+    public List<String> getDefaultSelectFields() { return defaultSelectFields; }
+    public void setDefaultSelectFields(List<String> v) { this.defaultSelectFields = v; }
+  }
+
+  // -------- field rules --------
+  public static class FieldRuleCfg {
+    private Match match = new Match();
+    private FieldSemanticsCfg semantics = new FieldSemanticsCfg();
+    public Match getMatch() { return match; }
+    public void setMatch(Match v) { this.match = v; }
+    public FieldSemanticsCfg getSemantics() { return semantics; }
+    public void setSemantics(FieldSemanticsCfg v) { this.semantics = v; }
+  }
+
+  public static class FieldSemanticsCfg {
+    private String fieldClass;
+    private String sensitivity;
+
+    public String getFieldClass() { return fieldClass; }
+    public void setFieldClass(String v) { this.fieldClass = v; }
+
+    public String getSensitivity() { return sensitivity; }
+    public void setSensitivity(String v) { this.sensitivity = v; }
+  }
+
+  // -------- graph --------
+  public static class GraphCfg {
+    private List<String> degradableDimensions = new ArrayList<>();
+    private List<String> nonDegradableDimensions = new ArrayList<>();
+    private List<EdgeCfg> edges = new ArrayList<>();
+
+    public List<String> getDegradableDimensions() { return degradableDimensions; }
+    public void setDegradableDimensions(List<String> v) { this.degradableDimensions = v; }
+
+    public List<String> getNonDegradableDimensions() { return nonDegradableDimensions; }
+    public void setNonDegradableDimensions(List<String> v) { this.nonDegradableDimensions = v; }
+
+    public List<EdgeCfg> getEdges() { return edges; }
+    public void setEdges(List<EdgeCfg> v) { this.edges = v; }
+  }
+
+  public static class EdgeCfg {
+    private String from;
+    private String to;
+
+    public String getFrom() { return from; }
+    public void setFrom(String v) { this.from = v; }
+
+    public String getTo() { return to; }
+    public void setTo(String v) { this.to = v; }
+  }
+
+  // -------- obfuscation --------
+  public static class ObfuscationCfg {
+    private Map<String, String> strategies = new LinkedHashMap<>();
+    public Map<String, String> getStrategies() { return strategies; }
+    public void setStrategies(Map<String, String> v) { this.strategies = v; }
+  }
+}
