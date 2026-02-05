@@ -1,0 +1,19 @@
+package com.example.semantic.engine;
+
+import com.example.semantic.config.PolicyProperties;
+
+import java.util.*;
+
+public class SemanticGraph {
+  private final Map<String, Set<String>> edges = new HashMap<>();
+
+  public SemanticGraph(PolicyProperties policy) {
+    for (var e : policy.getGraph().getEdges()) {
+      edges.computeIfAbsent(e.getFrom(), k -> new LinkedHashSet<>()).add(e.getTo());
+    }
+  }
+
+  public boolean allows(String from, String to) {
+    return edges.getOrDefault(from, Set.of()).contains(to);
+  }
+}
