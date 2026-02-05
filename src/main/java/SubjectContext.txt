@@ -1,0 +1,11 @@
+package com.example.semantic.model;
+
+import java.util.List;
+
+public record SubjectContext(
+    String userId,
+    String tenant,
+    String clientType, // INTERNAL | CONSUMER
+    String region,     // ISO region/country codes IN/EU/US/GLOBAL/APAC etc.
+    List<Purpose> allowedPurposes
+) {}
