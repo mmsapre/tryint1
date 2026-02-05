@@ -1,0 +1,36 @@
+package com.example.semantic.intent;
+
+import com.example.semantic.model.IntentResult;
+import com.example.semantic.model.Purpose;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.Map;
+
+@RestController
+@RequestMapping("/intent")
+public class IntentController {
+
+  @PostMapping("/classify")
+  public IntentResult classify(@RequestBody Map<String, Object> req) {
+    String text = String.valueOf(req.getOrDefault("text", ""));
+    String body = String.valueOf(req.getOrDefault("body", ""));
+
+    // Simple “Permit-style” heuristic:
+    // - export keywords => EXTERNAL_REPORT
+    // - update verbs => INTERNAL_OPERATION
+    // - "client" / account/customer id => CLIENT_REPORT
+    // - default => VIEW_ONLY
+    String t = (text + " " + body).toLowerCase();
+
+    if (t.contains("export") || t.contains("csv") || t.contains("download")) {
+      return new IntentResult(Purpose.EXTERNAL_REPORT, 0.90, "export keywords");
+    }
+    if (t.contains("update") || t.contains("delete") || t.contains("patch") || t.contains("modify")) {
+      return new IntentResult(Purpose.INTERNAL_OPERATION, 0.90, "mutation keywords");
+    }
+    if (t.contains("client") || t.contains("account_id") || t.contains("customer_id")) {
+      return new IntentResult(Purpose.CLIENT_REPORT, 0.80, "client/account/customer keys");
+    }
+    return new IntentResult(Purpose.VIEW_ONLY, 0.60, "default");
+  }
+}
