@@ -1,0 +1,100 @@
+server:
+  port: 8080
+
+spring:
+  main:
+    web-application-type: reactive
+
+  cloud:
+    gateway:
+      routes:
+        - id: demo-backend
+          uri: http://localhost:${server.port}
+          predicates:
+            - Path=/api/**
+          filters:
+            - RewritePath=/api/(?<segment>.*), /backend/${segment}
+
+policy:
+  confidenceThreshold: 0.75
+
+  # URL → dataset mapping (domain + region enforced)
+  datasetRules:
+    - match: { pathRegex: "/api/accounts/.*" }
+      yields: { dataset: "accounts-in" }
+    - match: { pathRegex: "/api/instruments/.*" }
+      yields: { dataset: "instruments-global" }
+    - match: { pathRegex: "/api/customers/.*" }
+      yields: { dataset: "customer-in" }
+    - match: { pathRegex: "/api/party/.*" }
+      yields: { dataset: "party-eu" }
+
+  # Dataset registry: domain + ISO region/country codes
+  datasets:
+    accounts-in:
+      dataDomains: [accounts]
+      regions: [IN]
+      defaultSelectFields: [account_id, client_id, email, balance, country, city]
+
+    customer-in:
+      dataDomains: [customer]
+      regions: [IN]
+      defaultSelectFields: [customer_id, name, email, pan, country]
+
+    party-eu:
+      dataDomains: [party]
+      regions: [EU]
+      defaultSelectFields: [party_id, party_name, lei, country]
+
+    instruments-global:
+      dataDomains: [instruments]
+      regions: [GLOBAL]
+      defaultSelectFields: [instrument_id, isin, cusip, issuer, country]
+
+  # Field classification rules (key-name based, works for any JSON payload/response)
+  fieldRegistry:
+    - match: { pathRegex: ".*email.*|.*pan.*|.*name.*|.*addr.*|.*city.*|.*phone.*" }
+      semantics: { fieldClass: pii, sensitivity: VERY_HIGH }
+
+    - match: { pathRegex: ".*account.*|.*client.*|.*customer.*|.*party.*|.*isin.*|.*cusip.*|.*lei.*" }
+      semantics: { fieldClass: identifier, sensitivity: HIGH }
+
+    - match: { pathRegex: ".*balance.*|.*amount.*|.*notional.*|.*qty.*|.*market_value.*" }
+      semantics: { fieldClass: financial, sensitivity: MEDIUM }
+
+    - match: { pathRegex: ".*country.*|.*issuer.*|.*region.*|.*type.*|.*status.*" }
+      semantics: { fieldClass: derived, sensitivity: LOW }
+
+  # Graph constraints: purpose & field class logic
+  graph:
+    degradableDimensions: [PURPOSE, FIELD_CLASS]
+    nonDegradableDimensions: [REGION, DATA_DOMAIN]
+
+    edges:
+      # Client type -> purpose
+      - { from: "CLIENT_TYPE:CONSUMER", to: "PURPOSE:CLIENT_REPORT" }
+      - { from: "CLIENT_TYPE:CONSUMER", to: "PURPOSE:VIEW_ONLY" }
+      - { from: "CLIENT_TYPE:INTERNAL",  to: "PURPOSE:INTERNAL_REPORT" }
+      - { from: "CLIENT_TYPE:INTERNAL",  to: "PURPOSE:INTERNAL_OPERATION" }
+
+      # Purpose -> field class allowances
+      - { from: "PURPOSE:VIEW_ONLY",       to: "FIELD_CLASS:derived" }
+      - { from: "PURPOSE:CLIENT_REPORT",   to: "FIELD_CLASS:identifier" }
+      - { from: "PURPOSE:CLIENT_REPORT",   to: "FIELD_CLASS:pii" }
+      - { from: "PURPOSE:CLIENT_REPORT",   to: "FIELD_CLASS:financial" }
+      - { from: "PURPOSE:INTERNAL_REPORT", to: "FIELD_CLASS:identifier" }
+      - { from: "PURPOSE:INTERNAL_REPORT", to: "FIELD_CLASS:financial" }
+      - { from: "PURPOSE:INTERNAL_REPORT", to: "FIELD_CLASS:derived" }
+
+  # Obfuscation strategies per field class
+  obfuscation:
+    strategies:
+      pii: MASK
+      identifier: REDACT
+      financial: BUCKET
+      derived: NONE
+
+intent:
+  # Permit-style intent classification endpoint (demo local service)
+  baseUrl: http://localhost:${server.port}
+  classifyPath: /intent/classify
